@@ -5,8 +5,6 @@ import { classNames } from '~/utils/classNames';
 import { createScopedLogger, renderLogger } from '~/utils/logger';
 import { workbenchStore } from '~/lib/stores/workbench';
 
-const logger = createScopedLogger('FileTree');
-
 const NODE_PADDING_LEFT = 8;
 const DEFAULT_HIDDEN_FILES = [/\/node_modules\//, /\/\.next/, /\/\.astro/];
 
@@ -35,6 +33,7 @@ export const FileTree = memo(
     unsavedFiles,
   }: Props) => {
     renderLogger.trace('FileTree');
+
     const filesStore = useStore(workbenchStore.filesStore);
 
     const store = useStore(workbenchStore.filesStore);
@@ -45,30 +44,82 @@ export const FileTree = memo(
       return buildFileList(store.files.get(), rootFolder, hideRoot, computedHiddenFiles);
     }, [store.files, rootFolder, hideRoot, computedHiddenFiles]);
 
-    const [collapsedFolders, setCollapsedFolders] = useState(() => {
-      return collapsed
-        ? new Set(fileList.filter((item) => item.kind === 'folder').map((item) => item.fullPath))
+    const folders = useMemo(() => fileList.filter((item) => item.kind === 'folder'), [fileList]);
+
+    // Initial collapsed folders based on props
+    const initialCollapsedFolders = useMemo(() => {
+      return collapsed && collapsed.length > 0
+        ? new Set(
+            fileList
+              .filter((item) => item.kind === 'folder')
+              .map((item) => item.fullPath)
+              .filter((path) => collapsed.includes(path)),
+          )
         : new Set<string>();
-    });
+    }, [collapsed, fileList]);
+
+    const [collapsedFolders, setCollapsedFolders] = useState(initialCollapsedFolders);
+
+    // Helper to compare two sets for equality
+    function setsAreEqual(a: Set<string>, b: Set<string>): boolean {
+      if (a.size !== b.size) {
+        return false;
+      }
+
+      for (const val of a) {
+        if (!b.has(val)) {
+          return false;
+        }
+      }
+
+      return true;
+    }
 
     useEffect(() => {
-      if (collapsed) {
-        setCollapsedFolders(new Set(fileList.filter((item) => item.kind === 'folder').map((item) => item.fullPath)));
+      const folderPaths = folders.map((item) => item.fullPath);
+
+      // If we have a collapsed prop, enforce it
+      if (collapsed && collapsed.length > 0) {
+        const newCollapsed = new Set(folderPaths.filter((path) => collapsed.includes(path)));
+
+        // Only update state if there's a real change
+        if (!setsAreEqual(newCollapsed, collapsedFolders)) {
+          setCollapsedFolders(newCollapsed);
+        }
+
         return;
       }
 
+      // Otherwise, keep only those previously collapsed folders that still exist
       setCollapsedFolders((prevCollapsed) => {
         const newCollapsed = new Set<string>();
 
-        for (const folder of fileList) {
-          if (folder.kind === 'folder' && prevCollapsed.has(folder.fullPath)) {
+        for (const folder of folders) {
+          if (prevCollapsed.has(folder.fullPath)) {
             newCollapsed.add(folder.fullPath);
           }
         }
 
-        return newCollapsed;
+        // Check if new set differs from old set
+        return setsAreEqual(newCollapsed, prevCollapsed) ? prevCollapsed : newCollapsed;
       });
-    }, [fileList, collapsed]);
+    }, [collapsed, folders, collapsedFolders, store]); // Include collapsedFolders to correctly compare sets
+
+    /*
+     *   useEffect(() => {
+     *   const fetchData = async () => {
+     *    try {
+     *      const data = await someAsyncOperation();
+     *      // Handle data
+     *    } catch (error) {
+     *      logger.error('Failed to fetch data:', error);
+     *      // Optionally send a response or update state to reflect the error
+     *    }
+     *   };
+     *
+     *   fetchData();
+     *   }, []); // dependencies
+     */
 
     const filteredFileList = useMemo(() => {
       const list = [];
@@ -151,8 +202,6 @@ export const FileTree = memo(
     );
   },
 );
-
-export default FileTree;
 
 interface FolderProps {
   folder: FolderNode;
@@ -267,20 +316,27 @@ function NodeButton({ depth, iconClasses, onClick, onMouseEnter, onMouseLeave, c
 }
 
 type Node = FileNode | FolderNode;
-
 interface BaseNode {
   id: number;
   depth: number;
   name: string;
   fullPath: string;
 }
-
 interface FileNode extends BaseNode {
   kind: 'file';
 }
-
 interface FolderNode extends BaseNode {
   kind: 'folder';
+}
+
+function isHiddenFile(filePath: string, fileName: string, hiddenFiles: Array<string | RegExp>): boolean {
+  return hiddenFiles.some((pathOrRegex) => {
+    if (typeof pathOrRegex === 'string') {
+      return filePath.includes(pathOrRegex) || fileName.includes(pathOrRegex);
+    } else {
+      return pathOrRegex.test(filePath) || pathOrRegex.test(fileName);
+    }
+  });
 }
 
 function buildFileList(
@@ -308,7 +364,6 @@ function buildFileList(
     }
 
     let currentPath = '';
-
     let i = 0;
     let depth = 0;
 
@@ -331,7 +386,6 @@ function buildFileList(
         });
       } else if (!folderPaths.has(fullPath)) {
         folderPaths.add(fullPath);
-
         fileList.push({
           kind: 'folder',
           id: fileList.length,
@@ -346,95 +400,7 @@ function buildFileList(
     }
   }
 
-  return sortFileList(rootFolder, fileList, hideRoot);
+  return fileList;
 }
 
-function isHiddenFile(filePath: string, fileName: string, hiddenFiles: Array<string | RegExp>) {
-  return hiddenFiles.some((pathOrRegex) => {
-    if (typeof pathOrRegex === 'string') {
-      return fileName === pathOrRegex;
-    }
-
-    return pathOrRegex.test(filePath);
-  });
-}
-
-/**
- * Sorts the given list of nodes into a tree structure (still a flat list).
- *
- * This function organizes the nodes into a hierarchical structure based on their paths,
- * with folders appearing before files and all items sorted alphabetically within their level.
- *
- * @note This function mutates the given `nodeList` array for performance reasons.
- *
- * @param rootFolder - The path of the root folder to start the sorting from.
- * @param nodeList - The list of nodes to be sorted.
- *
- * @returns A new array of nodes sorted in depth-first order.
- */
-function sortFileList(rootFolder: string, nodeList: Node[], hideRoot: boolean): Node[] {
-  logger.trace('sortFileList');
-
-  const nodeMap = new Map<string, Node>();
-  const childrenMap = new Map<string, Node[]>();
-
-  // pre-sort nodes by name and type
-  nodeList.sort((a, b) => compareNodes(a, b));
-
-  for (const node of nodeList) {
-    nodeMap.set(node.fullPath, node);
-
-    const parentPath = node.fullPath.slice(0, node.fullPath.lastIndexOf('/'));
-
-    if (parentPath !== rootFolder.slice(0, rootFolder.lastIndexOf('/'))) {
-      if (!childrenMap.has(parentPath)) {
-        childrenMap.set(parentPath, []);
-      }
-
-      childrenMap.get(parentPath)?.push(node);
-    }
-  }
-
-  const sortedList: Node[] = [];
-
-  const depthFirstTraversal = (path: string): void => {
-    const node = nodeMap.get(path);
-
-    if (node) {
-      sortedList.push(node);
-    }
-
-    const children = childrenMap.get(path);
-
-    if (children) {
-      for (const child of children) {
-        if (child.kind === 'folder') {
-          depthFirstTraversal(child.fullPath);
-        } else {
-          sortedList.push(child);
-        }
-      }
-    }
-  };
-
-  if (hideRoot) {
-    // if root is hidden, start traversal from its immediate children
-    const rootChildren = childrenMap.get(rootFolder) || [];
-
-    for (const child of rootChildren) {
-      depthFirstTraversal(child.fullPath);
-    }
-  } else {
-    depthFirstTraversal(rootFolder);
-  }
-
-  return sortedList;
-}
-
-function compareNodes(a: Node, b: Node): number {
-  if (a.kind !== b.kind) {
-    return a.kind === 'folder' ? -1 : 1;
-  }
-
-  return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
-}
+export default FileTree;
