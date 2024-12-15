@@ -17,6 +17,9 @@ import { extractRelativePath } from '~/utils/diff';
 import { description } from '~/lib/persistence';
 import Cookies from 'js-cookie';
 import { createSampler } from '~/utils/sampler';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('WorkbenchStore');
 
 export interface ArtifactState {
   id: string;
@@ -291,7 +294,7 @@ export class WorkbenchStore {
     }
   }
   async _runAction(data: ActionCallbackData, isStreaming: boolean = false) {
-    const { messageId } = data;
+    const { messageId, actionId } = data;
 
     const artifact = this.#getArtifact(messageId);
 
@@ -299,38 +302,67 @@ export class WorkbenchStore {
       unreachable('Artifact not found');
     }
 
-    const action = artifact.runner.actions.get()[data.actionId];
+    const action = artifact.runner.actions.get()[actionId];
 
     if (!action || action.executed) {
       return;
     }
 
-    if (data.action.type === 'file') {
-      const wc = await webcontainer;
-      const fullPath = nodePath.join(wc.workdir, data.action.filePath);
+    try {
+      switch (data.action.type) {
+        case 'file': {
+          const wc = await webcontainer;
+          const fullPath = nodePath.join(wc.workdir, data.action.filePath);
 
-      if (this.selectedFile.value !== fullPath) {
-        this.setSelectedFile(fullPath);
+          // Check if file is locked before attempting modification
+          if (this.#filesStore.isFileLocked(fullPath)) {
+            throw new Error(`Cannot modify locked file: ${data.action.filePath}`);
+          }
+
+          if (this.selectedFile.value !== fullPath) {
+            this.setSelectedFile(fullPath);
+          }
+
+          if (this.currentView.value !== 'code') {
+            this.currentView.set('code');
+          }
+
+          const doc = this.#editorStore.documents.get()[fullPath];
+
+          if (!doc) {
+            await artifact.runner.runAction(data, isStreaming);
+          }
+
+          this.#editorStore.updateFile(fullPath, data.action.content);
+
+          if (!isStreaming) {
+            await artifact.runner.runAction(data);
+            this.resetAllFileModifications();
+          }
+          break;
+        }
+        default:
+          await artifact.runner.runAction(data);
       }
 
-      if (this.currentView.value !== 'code') {
-        this.currentView.set('code');
+      if (action.abortSignal.aborted) {
+        artifact.runner.actions.setKey(actionId, { ...action, status: 'aborted' });
+        return;
       }
 
-      const doc = this.#editorStore.documents.get()[fullPath];
-
-      if (!doc) {
-        await artifact.runner.runAction(data, isStreaming);
-      }
-
-      this.#editorStore.updateFile(fullPath, data.action.content);
-
-      if (!isStreaming) {
-        await artifact.runner.runAction(data);
-        this.resetAllFileModifications();
-      }
-    } else {
-      await artifact.runner.runAction(data);
+      artifact.runner.actions.setKey(actionId, {
+        ...action,
+        status: isStreaming ? 'running' : 'complete'
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Action failed';
+      artifact.runner.actions.setKey(actionId, {
+        ...action,
+        status: 'failed',
+        error: errorMessage
+      });
+      logger.error(`[${action.type}]:Action failed\n\n`, error);
+      throw error;
     }
   }
 
