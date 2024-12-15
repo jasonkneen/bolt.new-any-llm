@@ -229,6 +229,10 @@ export class WorkbenchStore {
     this.#filesStore.resetFileModifications();
   }
 
+  isFileLocked(filePath: string) {
+    return this.#filesStore.isFileLocked(filePath);
+  }
+
   abortAllActions() {
     // TODO: what do we wanna do and how do we wanna recover from this?
   }
