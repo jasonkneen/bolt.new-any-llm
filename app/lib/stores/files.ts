@@ -26,6 +26,7 @@ export interface Folder {
 type Dirent = File | Folder;
 
 export type FileMap = Record<string, Dirent | undefined>;
+export type LockedFiles = Set<string>;
 
 export class FilesStore {
   #webcontainer: Promise<WebContainer>;
@@ -46,6 +47,7 @@ export class FilesStore {
    * Map of files that matches the state of WebContainer.
    */
   files: MapStore<FileMap> = import.meta.hot?.data.files ?? map({});
+  lockedFiles: MapStore<LockedFiles> = import.meta.hot?.data.lockedFiles ?? map(new Set());
 
   get filesCount() {
     return this.#size;
@@ -57,6 +59,7 @@ export class FilesStore {
     if (import.meta.hot) {
       import.meta.hot.data.files = this.files;
       import.meta.hot.data.modifiedFiles = this.#modifiedFiles;
+      import.meta.hot.data.lockedFiles = this.lockedFiles;
     }
 
     this.#init();
@@ -78,6 +81,21 @@ export class FilesStore {
 
   resetFileModifications() {
     this.#modifiedFiles.clear();
+  }
+
+  isFileLocked(filePath: string) {
+    return this.lockedFiles.get().has(filePath);
+  }
+
+  toggleFileLock(filePath: string) {
+    const locked = this.lockedFiles.get();
+    const newLocked = new Set(locked);
+    if (newLocked.has(filePath)) {
+      newLocked.delete(filePath);
+    } else {
+      newLocked.add(filePath);
+    }
+    this.lockedFiles.set(newLocked);
   }
 
   async saveFile(filePath: string, content: string) {
