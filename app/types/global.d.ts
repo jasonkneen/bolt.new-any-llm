@@ -11,3 +11,9 @@ interface Performance {
     usedJSHeapSize: number;
   };
 }
+
+declare namespace JSX {
+  interface IntrinsicElements {
+    [elemName: string]: any;
+  }
+}

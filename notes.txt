@@ -1,0 +1,44 @@
+# Investigation Findings
+
+## TypeScript Configuration Issues
+1. Missing type declarations:
+   - react
+   - @nanostores/react
+   - framer-motion
+   - react-toastify
+   - js-cookie
+   - nanostores
+
+2. React/TypeScript Version Info:
+   - React: ^18.3.1
+   - React DOM: ^18.3.1
+   - TypeScript: ^5.7.2
+   - @types/react: ^18.3.12
+   - @types/react-dom: ^18.3.1
+
+3. Component Error Chain:
+   - EditorPanel.tsx:43:5 (props destructuring)
+   - Workbench.client.tsx:252:22 (View component)
+   - Chat.client.tsx:88:6, 34:83
+   - root.tsx:65:26, 84:17
+
+4. Browser Console Errors:
+   - Invalid hook call warnings
+   - React hydration errors
+   - TypeError: Cannot read properties of null (reading 'useState')
+
+5. Key Components:
+   - FileTree.tsx: Main file list component with type errors
+   - EditorPanel.tsx: Parent component integrating FileTree
+   - Workbench.client.tsx: Manages workbench state and view
+   - Chat.client.tsx: Part of error chain
+   - root.tsx: Root component with hydration issues
+
+6. Build Configuration:
+   - Using Vite with Remix
+   - Chrome Canary required for development
+   - Special middleware for Chrome 129 issues
+
+7. Package Management:
+   - Using pnpm@9.4.0
+   - Dependencies installed but type issues persist

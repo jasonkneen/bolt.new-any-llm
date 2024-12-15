@@ -35,7 +35,6 @@ export const FileTree = memo(
     unsavedFiles,
   }: Props) => {
     renderLogger.trace('FileTree');
-    const filesStore = useStore(workbenchStore.filesStore);
 
     const store = useStore(workbenchStore.filesStore);
 
