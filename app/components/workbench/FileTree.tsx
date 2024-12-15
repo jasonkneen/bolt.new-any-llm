@@ -276,7 +276,7 @@ function File({ path, name, selected, unsaved = false, onSelect }: FileProps) {
         {unsaved && <span className="i-ph:circle-fill scale-68 shrink-0 text-orange-500" />}
         {(showLock || isLocked) && (
           <button
-            className="i-ph:lock-simple-fill scale-75 shrink-0 hover:text-bolt-elements-item-contentActive"
+            className="i-ph:lock-simple-fill scale-100 shrink-0 hover:text-bolt-elements-item-contentActive"
             onClick={handleLockClick}
           />
         )}
