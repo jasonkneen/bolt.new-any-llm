@@ -1,8 +1,9 @@
 import { memo, useEffect, useMemo, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from 'react';
+import { useStore } from '@nanostores/react';
+import type { Store } from 'nanostores';
 import type { FileMap, FilesStore } from '~/lib/stores/files';
 import { classNames } from '~/utils/classNames';
 import { createScopedLogger, renderLogger } from '~/utils/logger';
-import { useStore } from '@nanostores/react';
 import { workbenchStore } from '~/lib/stores/workbench';
 
 const logger = createScopedLogger('FileTree');
@@ -37,6 +38,9 @@ export const FileTree = memo(
     unsavedFiles,
   }: Props) => {
     renderLogger.trace('FileTree');
+    const filesStore = useStore(workbenchStore.filesStore);
+
+    const [showLock, setShowLock] = useState<string | null>(null);
 
     const computedHiddenFiles = useMemo(() => [...DEFAULT_HIDDEN_FILES, ...(hiddenFiles ?? [])], [hiddenFiles]);
 
@@ -121,11 +125,10 @@ export const FileTree = memo(
                 <File
                   key={fileOrFolder.id}
                   selected={selectedFile === fileOrFolder.fullPath}
-                  file={fileOrFolder}
-                  unsavedChanges={unsavedFiles?.has(fileOrFolder.fullPath)}
-                  onClick={() => {
-                    onFileSelect?.(fileOrFolder.fullPath);
-                  }}
+                  path={fileOrFolder.fullPath}
+                  name={fileOrFolder.name}
+                  unsaved={unsavedFiles?.has(fileOrFolder.fullPath)}
+                  onSelect={onFileSelect}
                 />
               );
             }
@@ -182,46 +185,47 @@ function Folder({ folder: { depth, name }, collapsed, selected = false, onClick 
 }
 
 interface FileProps {
-  file: {
-    depth: number;
-    name: string;
-    fullPath: string;
-  };
-  selected: boolean;
-  unsavedChanges?: boolean;
-  onClick: () => void;
+  path: string;
+  name: string;
+  selected?: boolean;
+  unsaved?: boolean;
+  onSelect?: (path: string) => void;
 }
 
-function File({ file: { depth, name, fullPath }, onClick, selected, unsavedChanges = false }: FileProps) {
+function File({ path, name, selected, unsaved = false, onSelect }: FileProps) {
   const [showLock, setShowLock] = useState(false);
-  const filesStore = useStore(workbenchStore.filesStore) as FilesStore;
-  const isLocked = filesStore.isFileLocked(fullPath);
+  const filesStore = useStore(workbenchStore.filesStore);
+
+  const isLocked = filesStore?.isFileLocked?.(path) ?? false;
 
   const handleLockClick = (e: ReactMouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
-    filesStore.toggleFileLock(fullPath);
+    filesStore?.toggleFileLock?.(path);
   };
+
+  const buttonClasses = [
+    'group relative',
+    (!selected && !isLocked) ? 'bg-transparent hover:bg-bolt-elements-item-backgroundActive text-bolt-elements-item-contentDefault' : '',
+    isLocked ? 'opacity-50' : '',
+    selected ? 'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent' : ''
+  ].filter(Boolean);
 
   return (
     <NodeButton
-      className={classNames('group relative', {
-        'bg-transparent hover:bg-bolt-elements-item-backgroundActive text-bolt-elements-item-contentDefault': !selected && !isLocked,
-        'opacity-50': isLocked,
-        'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent': selected,
-      })}
-      depth={depth}
+      className={classNames(...buttonClasses)}
+      depth={0} // Assuming depth is not needed for File component
       onMouseEnter={() => setShowLock(true)}
       onMouseLeave={() => setShowLock(false)}
       iconClasses={classNames('i-ph:file-duotone scale-98', {
         'group-hover:text-bolt-elements-item-contentActive': !selected,
       })}
-      onClick={onClick}
+      onClick={() => onSelect?.(path)}
     >
       <div className={classNames('flex items-center', {
         'group-hover:text-bolt-elements-item-contentActive': !selected,
       })}>
         <div className="flex-1 truncate pr-2">{name}</div>
-        {unsavedChanges && <span className="i-ph:circle-fill scale-68 shrink-0 text-orange-500" />}
+        {unsaved && <span className="i-ph:circle-fill scale-68 shrink-0 text-orange-500" />}
         {(showLock || isLocked) && (
           <button
             className="i-ph:lock-simple-fill scale-75 shrink-0 hover:text-bolt-elements-item-contentActive"
