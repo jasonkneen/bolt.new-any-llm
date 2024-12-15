@@ -1,4 +1,4 @@
-import { atom, map, type MapStore, type ReadableAtom, type WritableAtom } from 'nanostores';
+import { atom, map, type MapStore, type ReadableAtom, type WritableAtom, type Store } from 'nanostores';
 import type { EditorDocument, ScrollPosition } from '~/components/editor/codemirror/CodeMirrorEditor';
 import { ActionRunner } from '~/lib/runtime/action-runner';
 import type { ActionCallbackData, ArtifactCallbackData } from '~/lib/runtime/message-parser';
@@ -39,6 +39,7 @@ export class WorkbenchStore {
   #previewsStore = new PreviewsStore(webcontainer);
   #filesStore = new FilesStore(webcontainer);
   #filesStoreAtom = atom<FilesStore>(this.#filesStore);
+  #files: MapStore<FileMap> = map<FileMap>({});
   #editorStore = new EditorStore(this.#filesStore);
   #terminalStore = new TerminalStore(webcontainer);
 
@@ -67,12 +68,12 @@ export class WorkbenchStore {
     return this.#previewsStore.previews;
   }
 
-  get files() {
-    return this.#filesStore.files;
+  get files(): MapStore<FileMap> {
+    return this.#files;
   }
 
-  get filesStore() {
-    return this.#filesStoreAtom as ReturnType<typeof atom<FilesStore>>;
+  get filesStore(): Store<FilesStore> {
+    return this.#filesStoreAtom;
   }
 
   get currentDocument(): ReadableAtom<EditorDocument | undefined> {
@@ -131,15 +132,15 @@ export class WorkbenchStore {
     this.showWorkbench.set(show);
   }
 
-  setCurrentDocumentContent(newContent: string) {
+  async setCurrentDocumentContent(newContent: string) {
     const filePath = this.currentDocument.get()?.filePath;
 
     if (!filePath) {
       return;
     }
 
-    const originalContent = this.#filesStore.getFile(filePath)?.content;
-    const unsavedChanges = originalContent !== undefined && originalContent !== newContent;
+    const file = await this.#filesStore.getFile(filePath);
+    const unsavedChanges = file !== undefined && file !== newContent;
 
     this.#editorStore.updateFile(filePath, newContent);
 
@@ -206,7 +207,7 @@ export class WorkbenchStore {
     await this.saveFile(currentDocument.filePath);
   }
 
-  resetCurrentDocument() {
+  async resetCurrentDocument() {
     const currentDocument = this.currentDocument.get();
 
     if (currentDocument === undefined) {
@@ -214,13 +215,13 @@ export class WorkbenchStore {
     }
 
     const { filePath } = currentDocument;
-    const file = this.#filesStore.getFile(filePath);
+    const content = await this.#filesStore.getFile(filePath);
 
-    if (!file) {
+    if (!content) {
       return;
     }
 
-    this.setCurrentDocumentContent(file.content);
+    this.setCurrentDocumentContent(content);
   }
 
   async saveAllFiles() {
@@ -382,29 +383,28 @@ export class WorkbenchStore {
 
   async downloadZip() {
     const zip = new JSZip();
-    const files = this.files.get();
+    const files = this.#filesStore.files;
 
     // Get the project name from the description input, or use a default name
     const projectName = (description.value ?? 'project').toLocaleLowerCase().split(' ').join('_');
-
-    // Generate a simple 6-character hash based on the current timestamp
-    const timestampHash = Date.now().toString(36).slice(-6);
+    const timestampHash = Date.now().toString(36);
     const uniqueProjectName = `${projectName}_${timestampHash}`;
 
     for (const [filePath, dirent] of Object.entries(files)) {
-      if (dirent?.type === 'file' && !dirent.isBinary) {
+      if (dirent?.type === 'file' && !dirent.isBinary && dirent.content) {
         const relativePath = extractRelativePath(filePath);
 
         // split the path into segments
         const pathSegments = relativePath.split('/');
 
-        // if there's more than one segment, we need to create folders
         if (pathSegments.length > 1) {
+          // if there are multiple segments, we need to create folders
           let currentFolder = zip;
 
           for (let i = 0; i < pathSegments.length - 1; i++) {
             currentFolder = currentFolder.folder(pathSegments[i])!;
           }
+
           currentFolder.file(pathSegments[pathSegments.length - 1], dirent.content);
         } else {
           // if there's only one segment, it's a file in the root
@@ -413,17 +413,18 @@ export class WorkbenchStore {
       }
     }
 
-    // Generate the zip file and save it
-    const content = await zip.generateAsync({ type: 'blob' });
-    saveAs(content, `${uniqueProjectName}.zip`);
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(blob);
+
+    return { url, filename: `${uniqueProjectName}.zip` };
   }
 
   async syncFiles(targetHandle: FileSystemDirectoryHandle) {
-    const files = this.files.get();
+    const files = this.#filesStore.files;
     const syncedFiles = [];
 
     for (const [filePath, dirent] of Object.entries(files)) {
-      if (dirent?.type === 'file' && !dirent.isBinary) {
+      if (dirent?.type === 'file' && !dirent.isBinary && dirent.content) {
         const relativePath = extractRelativePath(filePath);
         const pathSegments = relativePath.split('/');
         let currentHandle = targetHandle;
@@ -439,7 +440,7 @@ export class WorkbenchStore {
 
         // write the file content
         const writable = await fileHandle.createWritable();
-        await writable.write(dirent.content);
+        await writable.write(new TextEncoder().encode(dirent.content));
         await writable.close();
 
         syncedFiles.push(relativePath);
@@ -484,7 +485,8 @@ export class WorkbenchStore {
       }
 
       // Get all files
-      const files = this.files.get();
+      const filesStoreInstance = this.#filesStore;
+      const files = filesStoreInstance.files;
 
       if (!files || Object.keys(files).length === 0) {
         throw new Error('No files found to push');
@@ -493,7 +495,7 @@ export class WorkbenchStore {
       // Create blobs for each file
       const blobs = await Promise.all(
         Object.entries(files).map(async ([filePath, dirent]) => {
-          if (dirent?.type === 'file' && dirent.content) {
+          if (dirent?.type === 'file' && dirent?.content) {
             const { data: blob } = await octokit.git.createBlob({
               owner: repo.owner.login,
               repo: repo.name,
