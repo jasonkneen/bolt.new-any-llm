@@ -1,7 +1,9 @@
-import { memo, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { memo, useEffect, useMemo, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from 'react';
 import type { FileMap } from '~/lib/stores/files';
 import { classNames } from '~/utils/classNames';
 import { createScopedLogger, renderLogger } from '~/utils/logger';
+import { useStore } from '@nanostores/react';
+import { workbenchStore } from '~/lib/stores/workbench';
 
 const logger = createScopedLogger('FileTree');
 
@@ -180,32 +182,50 @@ function Folder({ folder: { depth, name }, collapsed, selected = false, onClick 
 }
 
 interface FileProps {
-  file: FileNode;
+  file: {
+    depth: number;
+    name: string;
+    fullPath: string;
+  };
   selected: boolean;
   unsavedChanges?: boolean;
   onClick: () => void;
 }
 
-function File({ file: { depth, name }, onClick, selected, unsavedChanges = false }: FileProps) {
+function File({ file: { depth, name, fullPath }, onClick, selected, unsavedChanges = false }: FileProps) {
+  const [showLock, setShowLock] = useState(false);
+  const filesStore = useStore(workbenchStore.files);
+  const isLocked = filesStore.isFileLocked(fullPath);
+
   return (
     <NodeButton
-      className={classNames('group', {
-        'bg-transparent hover:bg-bolt-elements-item-backgroundActive text-bolt-elements-item-contentDefault': !selected,
+      className={classNames('group relative', {
+        'bg-transparent hover:bg-bolt-elements-item-backgroundActive text-bolt-elements-item-contentDefault': !selected && !isLocked,
+        'opacity-50': isLocked,
         'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent': selected,
       })}
       depth={depth}
+      onMouseEnter={() => setShowLock(true)}
+      onMouseLeave={() => setShowLock(false)}
       iconClasses={classNames('i-ph:file-duotone scale-98', {
         'group-hover:text-bolt-elements-item-contentActive': !selected,
       })}
       onClick={onClick}
     >
-      <div
-        className={classNames('flex items-center', {
-          'group-hover:text-bolt-elements-item-contentActive': !selected,
-        })}
-      >
+      <div className={classNames('flex items-center', {
+        'group-hover:text-bolt-elements-item-contentActive': !selected,
+      })}>
         <div className="flex-1 truncate pr-2">{name}</div>
         {unsavedChanges && <span className="i-ph:circle-fill scale-68 shrink-0 text-orange-500" />}
+        {(showLock || isLocked) && (
+          <button
+            className="i-ph:lock-simple-fill scale-75 shrink-0 hover:text-bolt-elements-item-contentActive"
+            onClick={(e: ReactMouseEvent<HTMLButtonElement>) => {
+              e.stopPropagation();
+              filesStore.toggleFileLock(fullPath);
+            }}
+          />
+        )}
       </div>
     </NodeButton>
   );
@@ -217,17 +237,21 @@ interface ButtonProps {
   children: ReactNode;
   className?: string;
   onClick?: () => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }
 
-function NodeButton({ depth, iconClasses, onClick, className, children }: ButtonProps) {
+function NodeButton({ depth, iconClasses, onClick, onMouseEnter, onMouseLeave, className, children }: ButtonProps) {
   return (
     <button
       className={classNames(
         'flex items-center gap-1.5 w-full pr-2 border-2 border-transparent text-faded py-0.5',
         className,
       )}
-      style={{ paddingLeft: `${6 + depth * NODE_PADDING_LEFT}px` }}
+      style={{ paddingLeft: `${6 + depth *NODE_PADDING_LEFT}px` }}
       onClick={() => onClick?.()}
+      onMouseEnter={() => onMouseEnter?.()}
+      onMouseLeave={() => onMouseLeave?.()}
     >
       <div className={classNames('scale-120 shrink-0', iconClasses)}></div>
       <div className="truncate w-full text-left">{children}</div>
