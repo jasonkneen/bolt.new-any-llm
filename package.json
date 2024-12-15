@@ -54,7 +54,6 @@
     "@iconify-json/ph": "^1.2.1",
     "@iconify-json/svg-spinners": "^1.2.1",
     "@lezer/highlight": "^1.2.1",
-    "@nanostores/react": "^0.7.3",
     "@octokit/rest": "^21.0.2",
     "@octokit/types": "^13.6.2",
     "@openrouter/ai-sdk-provider": "^0.0.5",
@@ -103,6 +102,7 @@
   "devDependencies": {
     "@blitz/eslint-plugin": "0.1.0",
     "@cloudflare/workers-types": "^4.20241127.0",
+    "@nanostores/react": "^0.7.3",
     "@remix-run/dev": "^2.15.0",
     "@types/diff": "^5.2.3",
     "@types/dom-speech-recognition": "^0.0.4",
