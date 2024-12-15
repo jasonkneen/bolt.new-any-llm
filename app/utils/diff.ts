@@ -116,6 +116,7 @@ export function fileModificationsToHTML(modifications: FileModifications) {
     if (content === undefined) {
       continue;
     }
+
     result.push(`<${type} path=${JSON.stringify(filePath)}>`, content, `</${type}>`);
   }
 

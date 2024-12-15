@@ -1,7 +1,6 @@
 import { memo, useEffect, useMemo, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from 'react';
 import { useStore } from '@nanostores/react';
-import type { Store } from 'nanostores';
-import type { FileMap, FilesStore } from '~/lib/stores/files';
+import type { FileMap } from '~/lib/stores/files';
 import { classNames } from '~/utils/classNames';
 import { createScopedLogger, renderLogger } from '~/utils/logger';
 import { workbenchStore } from '~/lib/stores/workbench';
@@ -12,12 +11,11 @@ const NODE_PADDING_LEFT = 8;
 const DEFAULT_HIDDEN_FILES = [/\/node_modules\//, /\/\.next/, /\/\.astro/];
 
 interface Props {
-  files?: FileMap;
   selectedFile?: string;
   onFileSelect?: (filePath: string) => void;
   rootFolder?: string;
   hideRoot?: boolean;
-  collapsed?: boolean;
+  collapsed?: string[];
   allowFolderSelection?: boolean;
   hiddenFiles?: Array<string | RegExp>;
   unsavedFiles?: Set<string>;
@@ -26,12 +24,11 @@ interface Props {
 
 export const FileTree = memo(
   ({
-    files = {},
     onFileSelect,
     selectedFile,
     rootFolder,
     hideRoot = false,
-    collapsed = false,
+    collapsed = [],
     allowFolderSelection = false,
     hiddenFiles,
     className,
@@ -40,13 +37,13 @@ export const FileTree = memo(
     renderLogger.trace('FileTree');
     const filesStore = useStore(workbenchStore.filesStore);
 
-    const [showLock, setShowLock] = useState<string | null>(null);
+    const store = useStore(workbenchStore.filesStore);
 
     const computedHiddenFiles = useMemo(() => [...DEFAULT_HIDDEN_FILES, ...(hiddenFiles ?? [])], [hiddenFiles]);
 
     const fileList = useMemo(() => {
-      return buildFileList(files, rootFolder, hideRoot, computedHiddenFiles);
-    }, [files, rootFolder, hideRoot, computedHiddenFiles]);
+      return buildFileList(store.files.get(), rootFolder, hideRoot, computedHiddenFiles);
+    }, [store.files, rootFolder, hideRoot, computedHiddenFiles]);
 
     const [collapsedFolders, setCollapsedFolders] = useState(() => {
       return collapsed
@@ -205,9 +202,11 @@ function File({ path, name, selected, unsaved = false, onSelect }: FileProps) {
 
   const buttonClasses = [
     'group relative',
-    (!selected && !isLocked) ? 'bg-transparent hover:bg-bolt-elements-item-backgroundActive text-bolt-elements-item-contentDefault' : '',
+    !selected && !isLocked
+      ? 'bg-transparent hover:bg-bolt-elements-item-backgroundActive text-bolt-elements-item-contentDefault'
+      : '',
     isLocked ? 'opacity-50' : '',
-    selected ? 'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent' : ''
+    selected ? 'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent' : '',
   ].filter(Boolean);
 
   return (
@@ -221,9 +220,11 @@ function File({ path, name, selected, unsaved = false, onSelect }: FileProps) {
       })}
       onClick={() => onSelect?.(path)}
     >
-      <div className={classNames('flex items-center', {
-        'group-hover:text-bolt-elements-item-contentActive': !selected,
-      })}>
+      <div
+        className={classNames('flex items-center', {
+          'group-hover:text-bolt-elements-item-contentActive': !selected,
+        })}
+      >
         <div className="flex-1 truncate pr-2">{name}</div>
         {unsaved && <span className="i-ph:circle-fill scale-68 shrink-0 text-orange-500" />}
         {(showLock || isLocked) && (
@@ -254,7 +255,7 @@ function NodeButton({ depth, iconClasses, onClick, onMouseEnter, onMouseLeave, c
         'flex items-center gap-1.5 w-full pr-2 border-2 border-transparent text-faded py-0.5',
         className,
       )}
-      style={{ paddingLeft: `${6 + depth *NODE_PADDING_LEFT}px` }}
+      style={{ paddingLeft: `${6 + depth * NODE_PADDING_LEFT}px` }}
       onClick={() => onClick?.()}
       onMouseEnter={() => onMouseEnter?.()}
       onMouseLeave={() => onMouseLeave?.()}

@@ -1,5 +1,4 @@
-import { atom, map, type MapStore, type Store } from 'nanostores';
-import { webcontainer } from '~/lib/webcontainer';
+import { map, type MapStore } from 'nanostores';
 import type { PathWatcherEvent, WebContainer } from '@webcontainer/api';
 import { createScopedLogger } from '~/utils/logger';
 import { getEncoding } from 'istextorbinary';
@@ -11,16 +10,20 @@ import { WORK_DIR } from '~/utils/constants';
 const logger = createScopedLogger('FilesStore');
 const utf8TextDecoder = new TextDecoder('utf8', { fatal: true });
 
-export type FileMap = Record<string, {
-  type: 'file' | 'folder';
-  content?: string;
-  isBinary?: boolean;
-} | undefined>;
+export type FileMap = Record<
+  string,
+  | {
+      type: 'file' | 'folder';
+      content?: string;
+      isBinary?: boolean;
+    }
+  | undefined
+>;
 
 export type LockedFiles = Record<string, boolean>;
 
 export interface IFilesStore {
-  files: FileMap;
+  files: MapStore<FileMap>;
   filesCount: number;
   isFileLocked(filePath: string): boolean;
   toggleFileLock(filePath: string): void;
@@ -53,8 +56,8 @@ export class FilesStore implements IFilesStore {
     this.#init();
   }
 
-  get files(): FileMap {
-    return this.#files.get();
+  get files(): MapStore<FileMap> {
+    return this.#files;
   }
 
   get filesCount(): number {
@@ -72,9 +75,7 @@ export class FilesStore implements IFilesStore {
   }
 
   getFileModifications(): Record<string, boolean> {
-    return Object.fromEntries(
-      Array.from(this.#modifiedFiles.keys()).map(file => [file, true])
-    );
+    return Object.fromEntries(Array.from(this.#modifiedFiles.keys()).map((file) => [file, true]));
   }
 
   resetFileModifications(): void {
@@ -89,7 +90,7 @@ export class FilesStore implements IFilesStore {
     const currentLocks = this.#lockedFiles.get();
     this.#lockedFiles.set({
       ...currentLocks,
-      [filePath]: !currentLocks[filePath]
+      [filePath]: !currentLocks[filePath],
     });
   }
 
@@ -108,7 +109,7 @@ export class FilesStore implements IFilesStore {
       this.#files.setKey(filePath, {
         type: 'file',
         content,
-        isBinary: false
+        isBinary: false,
       });
 
       logger.info('File updated');
@@ -135,15 +136,15 @@ export class FilesStore implements IFilesStore {
 
       switch (type) {
         case 'add_dir': {
-          this.#files.setKey(sanitizedPath, { type: 'folder' });
+          this.files.setKey(sanitizedPath, { type: 'folder' });
           break;
         }
         case 'remove_dir': {
-          this.#files.setKey(sanitizedPath, undefined);
+          this.files.setKey(sanitizedPath, undefined);
 
-          for (const [direntPath] of Object.entries(this.#files.get())) {
+          for (const [direntPath] of Object.entries(this.files.get())) {
             if (direntPath.startsWith(sanitizedPath)) {
-              this.#files.setKey(direntPath, undefined);
+              this.files.setKey(direntPath, undefined);
             }
           }
 
@@ -163,13 +164,13 @@ export class FilesStore implements IFilesStore {
             content = this.#decodeFileContent(buffer);
           }
 
-          this.#files.setKey(sanitizedPath, { type: 'file', content, isBinary });
+          this.files.setKey(sanitizedPath, { type: 'file', content, isBinary });
 
           break;
         }
         case 'remove_file': {
           this.#size--;
-          this.#files.setKey(sanitizedPath, undefined);
+          this.files.setKey(sanitizedPath, undefined);
           break;
         }
         case 'update_directory': {

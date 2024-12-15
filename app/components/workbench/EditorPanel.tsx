@@ -80,7 +80,6 @@ export const EditorPanel = memo(
                 </PanelHeader>
                 <FileTree
                   className="h-full"
-                  files={files}
                   hideRoot
                   unsavedFiles={unsavedFiles}
                   rootFolder={WORK_DIR}
