@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useState, type ReactNode, type MouseEvent as 
 import { useStore } from '@nanostores/react';
 import type { FileMap } from '~/lib/stores/files';
 import { classNames } from '~/utils/classNames';
-import { createScopedLogger, renderLogger } from '~/utils/logger';
+import { renderLogger } from '~/utils/logger';
 import { workbenchStore } from '~/lib/stores/workbench';
 
 const NODE_PADDING_LEFT = 8;
@@ -33,8 +33,6 @@ export const FileTree = memo(
     unsavedFiles,
   }: Props) => {
     renderLogger.trace('FileTree');
-
-    const filesStore = useStore(workbenchStore.filesStore);
 
     const store = useStore(workbenchStore.filesStore);
 
