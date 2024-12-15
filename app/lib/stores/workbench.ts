@@ -10,7 +10,6 @@ import { FilesStore, type FileMap } from './files';
 import { PreviewsStore } from './previews';
 import { TerminalStore } from './terminal';
 import JSZip from 'jszip';
-import { saveAs } from 'file-saver';
 import { Octokit, type RestEndpointMethodTypes } from '@octokit/rest';
 import * as nodePath from 'node:path';
 import { extractRelativePath } from '~/utils/diff';
@@ -58,6 +57,11 @@ export class WorkbenchStore {
       import.meta.hot.data.showWorkbench = this.showWorkbench;
       import.meta.hot.data.currentView = this.currentView;
     }
+
+    // Subscribe to filesStore changes
+    this.#filesStore.files.subscribe((files) => {
+      this.#files.set(files);
+    });
   }
 
   addToExecutionQueue(callback: () => Promise<void>) {
@@ -345,6 +349,7 @@ export class WorkbenchStore {
             await artifact.runner.runAction(data);
             this.resetAllFileModifications();
           }
+
           break;
         }
         default:
@@ -358,14 +363,14 @@ export class WorkbenchStore {
 
       artifact.runner.actions.setKey(actionId, {
         ...action,
-        status: isStreaming ? 'running' : 'complete'
+        status: isStreaming ? 'running' : 'complete',
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Action failed';
       artifact.runner.actions.setKey(actionId, {
         ...action,
         status: 'failed',
-        error: errorMessage
+        error: errorMessage,
       });
       logger.error(`[${action.type}]:Action failed\n\n`, error);
       throw error;
