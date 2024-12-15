@@ -6,6 +6,7 @@ import { createScopedLogger } from '~/utils/logger';
 import { unreachable } from '~/utils/unreachable';
 import type { ActionCallbackData } from './message-parser';
 import type { BoltShell } from '~/utils/shell';
+import { workbenchStore } from '~/lib/stores/workbench';
 
 const logger = createScopedLogger('ActionRunner');
 
@@ -142,7 +143,8 @@ export class ActionRunner {
         status: isStreaming ? 'running' : action.abortSignal.aborted ? 'aborted' : 'complete',
       });
     } catch (error) {
-      this.#updateAction(actionId, { status: 'failed', error: 'Action failed' });
+      const errorMessage = error instanceof Error ? error.message : 'Action failed';
+      this.#updateAction(actionId, { status: 'failed', error: errorMessage });
       logger.error(`[${action.type}]:Action failed\n\n`, error);
 
       // re-throw the error to be caught in the promise chain
@@ -203,6 +205,10 @@ export class ActionRunner {
 
     const webcontainer = await this.#webcontainer;
 
+    if (workbenchStore.isFileLocked(action.filePath)) {
+      throw new Error(`Cannot modify locked file: ${action.filePath}`);
+    }
+
     let folder = nodePath.dirname(action.filePath);
 
     // remove trailing slashes
@@ -222,8 +228,10 @@ export class ActionRunner {
       logger.debug(`File written ${action.filePath}`);
     } catch (error) {
       logger.error('Failed to write file\n\n', error);
+      throw error; // Re-throw to ensure error handling catches it
     }
   }
+
   #updateAction(id: string, newState: ActionStateUpdate) {
     const actions = this.actions.get();
 

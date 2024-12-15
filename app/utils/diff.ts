@@ -9,7 +9,7 @@ export const modificationsRegex = new RegExp(
 
 interface ModifiedFile {
   type: 'diff' | 'file';
-  content: string;
+  content: string | undefined;
 }
 
 type FileModifications = Record<string, ModifiedFile>;
@@ -22,7 +22,7 @@ export function computeFileModifications(files: FileMap, modifiedFiles: Map<stri
   for (const [filePath, originalContent] of modifiedFiles) {
     const file = files[filePath];
 
-    if (file?.type !== 'file') {
+    if (file?.type !== 'file' || !file.content || !originalContent) {
       continue;
     }
 
@@ -58,7 +58,11 @@ export function computeFileModifications(files: FileMap, modifiedFiles: Map<stri
  *
  * @see https://www.gnu.org/software/diffutils/manual/html_node/Unified-Format.html
  */
-export function diffFiles(fileName: string, oldFileContent: string, newFileContent: string) {
+export function diffFiles(fileName: string, oldFileContent: string | undefined, newFileContent: string | undefined) {
+  if (!oldFileContent || !newFileContent) {
+    return undefined;
+  }
+
   let unifiedDiff = createTwoFilesPatch(fileName, fileName, oldFileContent, newFileContent);
 
   const patchHeaderEnd = `--- ${fileName}\n+++ ${fileName}\n`;
@@ -108,6 +112,10 @@ export function fileModificationsToHTML(modifications: FileModifications) {
   const result: string[] = [`<${MODIFICATIONS_TAG_NAME}>`];
 
   for (const [filePath, { type, content }] of entries) {
+    // Skip entries with undefined content
+    if (content === undefined) {
+      continue;
+    }
     result.push(`<${type} path=${JSON.stringify(filePath)}>`, content, `</${type}>`);
   }
 

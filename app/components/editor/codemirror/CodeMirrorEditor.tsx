@@ -25,6 +25,9 @@ import { BinaryContent } from './BinaryContent';
 import { getTheme, reconfigureTheme } from './cm-theme';
 import { indentKeyBinding } from './indent';
 import { getLanguage } from './languages';
+import { useStore } from '@nanostores/react';
+import { workbenchStore } from '~/lib/stores/workbench';
+import type { FilesStore } from '~/lib/stores/files';
 
 const logger = createScopedLogger('CodeMirrorEditor');
 
@@ -76,7 +79,7 @@ interface Props {
 
 type EditorStates = Map<string, EditorState>;
 
-const readOnlyTooltipStateEffect = StateEffect.define<boolean>();
+const readOnlyTooltipStateEffect = StateEffect.define<{ readOnly: boolean; isLocked: boolean }>();
 
 const editableTooltipField = StateField.define<readonly Tooltip[]>({
   create: () => [],
@@ -86,8 +89,8 @@ const editableTooltipField = StateField.define<readonly Tooltip[]>({
     }
 
     for (const effect of transaction.effects) {
-      if (effect.is(readOnlyTooltipStateEffect) && effect.value) {
-        return getReadOnlyTooltip(transaction.state);
+      if (effect.is(readOnlyTooltipStateEffect) && effect.value.readOnly) {
+        return getReadOnlyTooltip(transaction.state, effect.value.isLocked);
       }
     }
 
@@ -142,6 +145,9 @@ export const CodeMirrorEditor = memo(
     const onScrollRef = useRef(onScroll);
     const onChangeRef = useRef(onChange);
     const onSaveRef = useRef(onSave);
+
+    const files = useStore(workbenchStore.files);
+    const isLocked = doc?.filePath ? Boolean(workbenchStore.isFileLocked(doc.filePath)) : false;
 
     /**
      * This effect is used to avoid side effects directly in the render function
@@ -246,17 +252,17 @@ export const CodeMirrorEditor = memo(
       setEditorDocument(
         view,
         theme,
-        editable,
+        editable && !isLocked,
         languageCompartment,
         autoFocusOnDocumentChange,
         doc as TextEditorDocument,
       );
-    }, [doc?.value, editable, doc?.filePath, autoFocusOnDocumentChange]);
+    }, [doc?.value, editable, doc?.filePath, autoFocusOnDocumentChange, isLocked]);
 
     return (
       <div className={classNames('relative h-full', className)}>
         {doc?.isBinary && <BinaryContent />}
-        <div className="h-full overflow-hidden" ref={containerRef} />
+        <div className={classNames('h-full overflow-hidden', { 'opacity-50': isLocked })} ref={containerRef} />
       </div>
     );
   },
@@ -287,9 +293,10 @@ function newEditorState(
           onScrollRef.current?.({ left: view.scrollDOM.scrollLeft, top: view.scrollDOM.scrollTop });
         }, debounceScroll),
         keydown: (event, view) => {
+          const isLocked = Boolean(view.state.field(editableStateField, false));
           if (view.state.readOnly) {
             view.dispatch({
-              effects: [readOnlyTooltipStateEffect.of(event.key !== 'Escape')],
+              effects: [readOnlyTooltipStateEffect.of({ readOnly: event.key !== 'Escape', isLocked })],
             });
 
             return true;
@@ -434,7 +441,7 @@ function setEditorDocument(
   });
 }
 
-function getReadOnlyTooltip(state: EditorState) {
+function getReadOnlyTooltip(state: EditorState, isLocked: boolean) {
   if (!state.readOnly) {
     return [];
   }
@@ -452,7 +459,9 @@ function getReadOnlyTooltip(state: EditorState) {
         create: () => {
           const divElement = document.createElement('div');
           divElement.className = 'cm-readonly-tooltip';
-          divElement.textContent = 'Cannot edit file while AI response is being generated';
+          divElement.textContent = isLocked
+            ? 'This file is locked and cannot be edited'
+            : 'Cannot edit file while AI response is being generated';
 
           return { dom: divElement };
         },
