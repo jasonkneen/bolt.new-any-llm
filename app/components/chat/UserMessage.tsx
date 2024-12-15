@@ -1,7 +1,3 @@
-/*
- * @ts-nocheck
- * Preventing TS checks with files presented in the video for a better presentation.
- */
 import { MODEL_REGEX, PROVIDER_REGEX } from '~/utils/constants';
 import { Markdown } from './Markdown';
 
@@ -12,7 +8,7 @@ interface UserMessageProps {
 export function UserMessage({ content }: UserMessageProps) {
   if (Array.isArray(content)) {
     const textItem = content.find((item) => item.type === 'text');
-    const textContent = sanitizeUserMessage(textItem?.text || '');
+    const textContent = textItem?.text ? sanitizeUserMessage(textItem.text) : '';
     const images = content.filter((item) => item.type === 'image' && item.image);
 
     return (
@@ -48,6 +44,10 @@ export function UserMessage({ content }: UserMessageProps) {
   );
 }
 
-function sanitizeUserMessage(content: string) {
+function sanitizeUserMessage(content: string | undefined): string {
+  if (!content) {
+    return '';
+  }
+
   return content.replace(MODEL_REGEX, '').replace(PROVIDER_REGEX, '');
 }
