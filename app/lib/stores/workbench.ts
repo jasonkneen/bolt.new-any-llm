@@ -38,6 +38,7 @@ export type WorkbenchViewType = 'code' | 'preview';
 export class WorkbenchStore {
   #previewsStore = new PreviewsStore(webcontainer);
   #filesStore = new FilesStore(webcontainer);
+  #filesStoreAtom = atom<FilesStore>(this.#filesStore);
   #editorStore = new EditorStore(this.#filesStore);
   #terminalStore = new TerminalStore(webcontainer);
 
@@ -68,6 +69,10 @@ export class WorkbenchStore {
 
   get files() {
     return this.#filesStore.files;
+  }
+
+  get filesStore() {
+    return this.#filesStoreAtom as ReturnType<typeof atom<FilesStore>>;
   }
 
   get currentDocument(): ReadableAtom<EditorDocument | undefined> {

@@ -1,6 +1,6 @@
 import type { PathWatcherEvent, WebContainer } from '@webcontainer/api';
 import { getEncoding } from 'istextorbinary';
-import { map, type MapStore } from 'nanostores';
+import { atom, map, type MapStore } from 'nanostores';
 import { Buffer } from 'node:buffer';
 import * as nodePath from 'node:path';
 import { bufferWatchEvents } from '~/utils/buffer';
@@ -83,11 +83,11 @@ export class FilesStore {
     this.#modifiedFiles.clear();
   }
 
-  isFileLocked(filePath: string) {
+  isFileLocked(filePath: string): boolean {
     return this.lockedFiles.get().has(filePath);
   }
 
-  toggleFileLock(filePath: string) {
+  toggleFileLock(filePath: string): void {
     const locked = this.lockedFiles.get();
     const newLocked = new Set(locked);
     if (newLocked.has(filePath)) {

@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from 'react';
-import type { FileMap } from '~/lib/stores/files';
+import type { FileMap, FilesStore } from '~/lib/stores/files';
 import { classNames } from '~/utils/classNames';
 import { createScopedLogger, renderLogger } from '~/utils/logger';
 import { useStore } from '@nanostores/react';
@@ -194,8 +194,13 @@ interface FileProps {
 
 function File({ file: { depth, name, fullPath }, onClick, selected, unsavedChanges = false }: FileProps) {
   const [showLock, setShowLock] = useState(false);
-  const filesStore = useStore(workbenchStore.files);
+  const filesStore = useStore(workbenchStore.filesStore) as FilesStore;
   const isLocked = filesStore.isFileLocked(fullPath);
+
+  const handleLockClick = (e: ReactMouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    filesStore.toggleFileLock(fullPath);
+  };
 
   return (
     <NodeButton
@@ -220,10 +225,7 @@ function File({ file: { depth, name, fullPath }, onClick, selected, unsavedChang
         {(showLock || isLocked) && (
           <button
             className="i-ph:lock-simple-fill scale-75 shrink-0 hover:text-bolt-elements-item-contentActive"
-            onClick={(e: ReactMouseEvent<HTMLButtonElement>) => {
-              e.stopPropagation();
-              filesStore.toggleFileLock(fullPath);
-            }}
+            onClick={handleLockClick}
           />
         )}
       </div>
