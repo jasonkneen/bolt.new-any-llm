@@ -36,6 +36,15 @@ export const FileTree = memo(
   }: Props) => {
     renderLogger.trace('FileTree');
     const filesStore = useStore(workbenchStore.filesStore);
+    const ready = useStore(filesStore?.ready);
+
+    if (!ready) {
+      return (
+        <div className="flex items-center justify-center h-full text-sm text-bolt-elements-item-contentDefault">
+          Loading files...
+        </div>
+      );
+    }
 
     const store = useStore(workbenchStore.filesStore);
 

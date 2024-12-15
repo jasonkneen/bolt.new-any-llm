@@ -25,6 +25,7 @@ export type LockedFiles = Record<string, boolean>;
 export interface IFilesStore {
   files: MapStore<FileMap>;
   filesCount: number;
+  ready: Store<boolean>;
   isFileLocked(filePath: string): boolean;
   toggleFileLock(filePath: string): void;
   getFile(filePath: string): Promise<string | undefined>;
@@ -40,6 +41,7 @@ export class FilesStore implements IFilesStore {
   #fileModifications: MapStore<Record<string, boolean>>;
   #size = 0;
   #modifiedFiles = new Map<string, string>();
+  #ready = atom(false);
 
   constructor(webcontainerPromise: Promise<WebContainer>) {
     this.#webcontainer = webcontainerPromise;
@@ -47,17 +49,19 @@ export class FilesStore implements IFilesStore {
     this.#lockedFiles = map({});
     this.#fileModifications = map({});
 
-    if (import.meta.hot) {
-      import.meta.hot.data.files = this.#files;
-      import.meta.hot.data.modifiedFiles = this.#modifiedFiles;
-      import.meta.hot.data.lockedFiles = this.#lockedFiles;
-    }
-
-    this.#init();
+    // Initialize the file system
+    this.#init().catch((error) => {
+      logger.error('Failed to initialize file system:', error);
+      throw error;
+    });
   }
 
   get files(): MapStore<FileMap> {
     return this.#files;
+  }
+
+  get ready(): Store<boolean> {
+    return this.#ready;
   }
 
   get filesCount(): number {
@@ -120,12 +124,17 @@ export class FilesStore implements IFilesStore {
   }
 
   async #init() {
-    const webcontainer = await this.#webcontainer;
-
-    webcontainer.internal.watchPaths(
-      { include: [`${WORK_DIR}/**`], exclude: ['**/node_modules', '.git'], includeContent: true },
-      bufferWatchEvents(100, this.#processEventBuffer.bind(this)),
-    );
+    try {
+      const webcontainer = await this.#webcontainer;
+      webcontainer.internal.watchPaths(
+        { include: [`${WORK_DIR}/**`], exclude: ['**/node_modules', '.git'], includeContent: true },
+        bufferWatchEvents(100, this.#processEventBuffer.bind(this)),
+      );
+      this.#ready.set(true);
+    } catch (error) {
+      this.#ready.set(false);
+      throw error;
+    }
   }
 
   #processEventBuffer(events: Array<[events: PathWatcherEvent[]]>) {
