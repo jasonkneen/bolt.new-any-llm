@@ -46,13 +46,11 @@ export const FileTree = memo(
       );
     }
 
-    const store = useStore(workbenchStore.filesStore);
-
     const computedHiddenFiles = useMemo(() => [...DEFAULT_HIDDEN_FILES, ...(hiddenFiles ?? [])], [hiddenFiles]);
 
     const fileList = useMemo(() => {
-      return buildFileList(store.files.get(), rootFolder, hideRoot, computedHiddenFiles);
-    }, [store.files, rootFolder, hideRoot, computedHiddenFiles]);
+      return buildFileList(filesStore.files.get(), rootFolder, hideRoot, computedHiddenFiles);
+    }, [filesStore.files, rootFolder, hideRoot, computedHiddenFiles]);
 
     const [collapsedFolders, setCollapsedFolders] = useState(() => {
       return collapsed
