@@ -1,12 +1,9 @@
 import { memo, useEffect, useMemo, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from 'react';
 import { useStore } from '@nanostores/react';
-import type { Store } from 'nanostores';
-import type { FileMap, FilesStore } from '~/lib/stores/files';
+import type { FileMap } from '~/lib/stores/files';
 import { classNames } from '~/utils/classNames';
-import { createScopedLogger, renderLogger } from '~/utils/logger';
+import { renderLogger } from '~/utils/logger';
 import { workbenchStore } from '~/lib/stores/workbench';
-
-const logger = createScopedLogger('FileTree');
 
 const NODE_PADDING_LEFT = 8;
 const DEFAULT_HIDDEN_FILES = [/\/node_modules\//, /\/\.next/, /\/\.astro/];
@@ -36,9 +33,8 @@ export const FileTree = memo(
     unsavedFiles,
   }: Props) => {
     renderLogger.trace('FileTree');
-    const filesStore = useStore(workbenchStore.filesStore);
 
-    const [showLock, setShowLock] = useState<string | null>(null);
+    const filesStore = useStore(workbenchStore.filesStore);
 
     const computedHiddenFiles = useMemo(() => [...DEFAULT_HIDDEN_FILES, ...(hiddenFiles ?? [])], [hiddenFiles]);
 
@@ -418,6 +414,7 @@ function buildFileList(
     if (a.kind !== b.kind) {
       return a.kind === 'folder' ? -1 : 1;
     }
+
     // Sort by name within same type
     return a.name.localeCompare(b.name);
   });

@@ -183,12 +183,13 @@ export class WorkbenchStore {
     if (filePath) {
       // Normalize the path
       const normalizedPath = filePath.startsWith('/') ? filePath : `/${filePath}`;
-      
+
       // Only set if file exists and is accessible
       const fileExists = this.#files.get()[normalizedPath];
+
       if (fileExists) {
         this.#editorStore.setSelectedFile(normalizedPath);
-        
+
         // Ensure the file content is loaded in the editor
         const content = fileExists.content || '';
         this.#editorStore.updateFile(normalizedPath, content);
@@ -362,6 +363,7 @@ export class WorkbenchStore {
             await artifact.runner.runAction(data);
             this.resetAllFileModifications();
           }
+
           break;
         }
         default:

@@ -1,5 +1,4 @@
-import { atom, map, type MapStore, type Store } from 'nanostores';
-import { webcontainer } from '~/lib/webcontainer';
+import { map, type MapStore } from 'nanostores';
 import type { PathWatcherEvent, WebContainer } from '@webcontainer/api';
 import { createScopedLogger } from '~/utils/logger';
 import { getEncoding } from 'istextorbinary';
@@ -11,11 +10,15 @@ import { WORK_DIR } from '~/utils/constants';
 const logger = createScopedLogger('FilesStore');
 const utf8TextDecoder = new TextDecoder('utf8', { fatal: true });
 
-export type FileMap = Record<string, {
-  type: 'file' | 'folder';
-  content?: string;
-  isBinary?: boolean;
-} | undefined>;
+export type FileMap = Record<
+  string,
+  | {
+      type: 'file' | 'folder';
+      content?: string;
+      isBinary?: boolean;
+    }
+  | undefined
+>;
 
 export type LockedFiles = Record<string, boolean>;
 
@@ -72,9 +75,7 @@ export class FilesStore implements IFilesStore {
   }
 
   getFileModifications(): Record<string, boolean> {
-    return Object.fromEntries(
-      Array.from(this.#modifiedFiles.keys()).map(file => [file, true])
-    );
+    return Object.fromEntries(Array.from(this.#modifiedFiles.keys()).map((file) => [file, true]));
   }
 
   resetFileModifications(): void {
@@ -89,7 +90,7 @@ export class FilesStore implements IFilesStore {
     const currentLocks = this.#lockedFiles.get();
     this.#lockedFiles.set({
       ...currentLocks,
-      [filePath]: !currentLocks[filePath]
+      [filePath]: !currentLocks[filePath],
     });
   }
 
@@ -108,7 +109,7 @@ export class FilesStore implements IFilesStore {
       this.#files.setKey(filePath, {
         type: 'file',
         content,
-        isBinary: false
+        isBinary: false,
       });
 
       logger.info('File updated');
