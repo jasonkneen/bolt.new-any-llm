@@ -27,6 +27,7 @@ import { indentKeyBinding } from './indent';
 import { getLanguage } from './languages';
 import { useStore } from '@nanostores/react';
 import { workbenchStore } from '~/lib/stores/workbench';
+import type { FilesStore } from '~/lib/stores/files';
 
 const logger = createScopedLogger('CodeMirrorEditor');
 
@@ -145,8 +146,8 @@ export const CodeMirrorEditor = memo(
     const onChangeRef = useRef(onChange);
     const onSaveRef = useRef(onSave);
 
-    const filesStore = useStore(workbenchStore.filesStore);
-    const isLocked = doc?.filePath ? filesStore.isFileLocked(doc.filePath) : false;
+    const files = useStore(workbenchStore.files);
+    const isLocked = doc?.filePath ? Boolean(workbenchStore.isFileLocked(doc.filePath)) : false;
 
     /**
      * This effect is used to avoid side effects directly in the render function
@@ -293,7 +294,6 @@ function newEditorState(
         }, debounceScroll),
         keydown: (event, view) => {
           const isLocked = Boolean(view.state.field(editableStateField, false));
-
           if (view.state.readOnly) {
             view.dispatch({
               effects: [readOnlyTooltipStateEffect.of({ readOnly: event.key !== 'Escape', isLocked })],

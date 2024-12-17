@@ -58,10 +58,8 @@ export class WorkbenchStore {
       import.meta.hot.data.currentView = this.currentView;
     }
 
-    // Subscribe to filesStore changes
-    this.#filesStore.files.subscribe((files) => {
-      this.#files.set(files);
-    });
+    // Set the files directly
+    this.#files.set(this.#filesStore.files);
   }
 
   addToExecutionQueue(callback: () => Promise<void>) {
@@ -182,7 +180,22 @@ export class WorkbenchStore {
   }
 
   setSelectedFile(filePath: string | undefined) {
-    this.#editorStore.setSelectedFile(filePath);
+    if (filePath) {
+      // Normalize the path
+      const normalizedPath = filePath.startsWith('/') ? filePath : `/${filePath}`;
+      
+      // Only set if file exists and is accessible
+      const fileExists = this.#files.get()[normalizedPath];
+      if (fileExists) {
+        this.#editorStore.setSelectedFile(normalizedPath);
+        
+        // Ensure the file content is loaded in the editor
+        const content = fileExists.content || '';
+        this.#editorStore.updateFile(normalizedPath, content);
+      }
+    } else {
+      this.#editorStore.setSelectedFile(undefined);
+    }
   }
 
   async saveFile(filePath: string) {
@@ -349,7 +362,6 @@ export class WorkbenchStore {
             await artifact.runner.runAction(data);
             this.resetAllFileModifications();
           }
-
           break;
         }
         default:

@@ -1,9 +1,12 @@
 import { memo, useEffect, useMemo, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from 'react';
 import { useStore } from '@nanostores/react';
-import type { FileMap } from '~/lib/stores/files';
+import type { Store } from 'nanostores';
+import type { FileMap, FilesStore } from '~/lib/stores/files';
 import { classNames } from '~/utils/classNames';
-import { renderLogger } from '~/utils/logger';
+import { createScopedLogger, renderLogger } from '~/utils/logger';
 import { workbenchStore } from '~/lib/stores/workbench';
+
+const logger = createScopedLogger('FileTree');
 
 const NODE_PADDING_LEFT = 8;
 const DEFAULT_HIDDEN_FILES = [/\/node_modules\//, /\/\.next/, /\/\.astro/];
@@ -33,14 +36,15 @@ export const FileTree = memo(
     unsavedFiles,
   }: Props) => {
     renderLogger.trace('FileTree');
+    const filesStore = useStore(workbenchStore.filesStore);
 
-    const store = useStore(workbenchStore.filesStore);
+    const [showLock, setShowLock] = useState<string | null>(null);
 
     const computedHiddenFiles = useMemo(() => [...DEFAULT_HIDDEN_FILES, ...(hiddenFiles ?? [])], [hiddenFiles]);
 
     const fileList = useMemo(() => {
-      return buildFileList(store.files.get(), rootFolder, hideRoot, computedHiddenFiles);
-    }, [store.files, rootFolder, hideRoot, computedHiddenFiles]);
+      return buildFileList(filesStore.files, rootFolder, hideRoot, computedHiddenFiles);
+    }, [filesStore.files, rootFolder, hideRoot, computedHiddenFiles]);
 
     const folders = useMemo(() => fileList.filter((item) => item.kind === 'folder'), [fileList]);
 
@@ -101,7 +105,7 @@ export const FileTree = memo(
         // Check if new set differs from old set
         return setsAreEqual(newCollapsed, prevCollapsed) ? prevCollapsed : newCollapsed;
       });
-    }, [collapsed, folders, collapsedFolders, store]); // Include collapsedFolders to correctly compare sets
+    }, [collapsed, folders, collapsedFolders]); // Include collapsedFolders to correctly compare sets
 
     /*
      *   useEffect(() => {
@@ -247,25 +251,31 @@ function File({ path, name, selected, unsaved = false, onSelect }: FileProps) {
     filesStore?.toggleFileLock?.(path);
   };
 
+  const handleFileClick = () => {
+    if (!isLocked && onSelect) {
+      onSelect(path);
+    }
+  };
+
   const buttonClasses = [
     'group relative',
     !selected && !isLocked
       ? 'bg-transparent hover:bg-bolt-elements-item-backgroundActive text-bolt-elements-item-contentDefault'
       : '',
-    isLocked ? 'opacity-50' : '',
+    isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
     selected ? 'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent' : '',
   ].filter(Boolean);
 
   return (
     <NodeButton
       className={classNames(...buttonClasses)}
-      depth={0} // Assuming depth is not needed for File component
+      depth={path.split('/').length - 1} // Calculate proper depth from path
       onMouseEnter={() => setShowLock(true)}
       onMouseLeave={() => setShowLock(false)}
       iconClasses={classNames('i-ph:file-duotone scale-98', {
-        'group-hover:text-bolt-elements-item-contentActive': !selected,
+        'group-hover:text-bolt-elements-item-contentActive': !selected && !isLocked,
       })}
-      onClick={() => onSelect?.(path)}
+      onClick={handleFileClick}
     >
       <div
         className={classNames('flex items-center', {
@@ -276,7 +286,7 @@ function File({ path, name, selected, unsaved = false, onSelect }: FileProps) {
         {unsaved && <span className="i-ph:circle-fill scale-68 shrink-0 text-orange-500" />}
         {(showLock || isLocked) && (
           <button
-            className="i-ph:lock-simple-fill scale-100 shrink-0 hover:text-bolt-elements-item-contentActive"
+            className="i-ph:lock-simple-fill scale-75 shrink-0 hover:text-bolt-elements-item-contentActive"
             onClick={handleLockClick}
           />
         )}
@@ -354,10 +364,12 @@ function buildFileList(
   }
 
   for (const [filePath, dirent] of Object.entries(files)) {
-    const segments = filePath.split('/').filter((segment) => segment);
+    // Ensure filePath is properly normalized
+    const normalizedPath = filePath.startsWith('/') ? filePath : `/${filePath}`;
+    const segments = normalizedPath.split('/').filter((segment) => segment);
     const fileName = segments.at(-1);
 
-    if (!fileName || isHiddenFile(filePath, fileName, hiddenFiles)) {
+    if (!fileName || isHiddenFile(normalizedPath, fileName, hiddenFiles)) {
       continue;
     }
 
@@ -374,13 +386,16 @@ function buildFileList(
         continue;
       }
 
+      // Add proper depth calculation
+      const nodeDepth = depth + (hideRoot ? 0 : defaultDepth);
+
       if (i === segments.length - 1 && dirent?.type === 'file') {
         fileList.push({
           kind: 'file',
           id: fileList.length,
           name,
           fullPath,
-          depth: depth + defaultDepth,
+          depth: nodeDepth,
         });
       } else if (!folderPaths.has(fullPath)) {
         folderPaths.add(fullPath);
@@ -389,7 +404,7 @@ function buildFileList(
           id: fileList.length,
           name,
           fullPath,
-          depth: depth + defaultDepth,
+          depth: nodeDepth,
         });
       }
 
@@ -398,7 +413,14 @@ function buildFileList(
     }
   }
 
-  return fileList;
+  return fileList.sort((a, b) => {
+    // Sort folders before files
+    if (a.kind !== b.kind) {
+      return a.kind === 'folder' ? -1 : 1;
+    }
+    // Sort by name within same type
+    return a.name.localeCompare(b.name);
+  });
 }
 
 export default FileTree;
